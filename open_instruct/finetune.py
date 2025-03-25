@@ -378,6 +378,24 @@ class FlatArguments:
         if self.try_launch_beaker_eval_jobs and not self.push_to_hub:
             raise ValueError("Cannot launch Beaker evaluation jobs without pushing to the Hub.")
 
+def save_dataset_shards(
+    dataset, output_dir: str, num_shards: int = 1, dataset_name: str = "oi_train_dataset"
+) -> None:
+    """
+    Saves the given dataset in the specified number of shards.
+
+    Args:
+        dataset: The dataset to shard and save.
+        output_dir (str): Directory to save the dataset shards.
+        num_shards (int): Number of shards to create.
+        dataset_name (str): Name of the dataset (used for logging).
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    for shard_idx in range(num_shards):
+        shard = dataset.shard(index=shard_idx, num_shards=num_shards)
+        shard_path = os.path.join(output_dir, f"ds_{shard_idx:05d}.parquet")
+        shard.to_parquet(shard_path)
+    pprint("Dumped %d shards of %s at %s", num_shards, dataset_name, output_dir)
 
 def main(args: FlatArguments, tc: TokenizerConfig):
     # ------------------------------------------------------------
@@ -512,6 +530,10 @@ def main(args: FlatArguments, tc: TokenizerConfig):
         train_dataset.set_format(type="pt")
     if accelerator.is_main_process:
         visualize_token(train_dataset[0][INPUT_IDS_KEY], tokenizer)
+
+    if accelerator.is_main_process:
+        pprint("[DB Debug] Dumping the processed train dataset")
+        save_dataset_shards(train_dataset, args.output_dir + "/dumped_dataset")
 
     if args.cache_dataset_only:
         return
