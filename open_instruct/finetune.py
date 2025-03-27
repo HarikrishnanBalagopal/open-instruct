@@ -42,6 +42,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
     get_scheduler,
 )
+from transformers.modeling_utils import get_parameter_dtype
 
 from open_instruct.dataset_transformation import (
     INPUT_IDS_KEY,
@@ -395,7 +396,7 @@ def save_dataset_shards(
         shard = dataset.shard(index=shard_idx, num_shards=num_shards)
         shard_path = os.path.join(output_dir, f"ds_{shard_idx:05d}.parquet")
         shard.to_parquet(shard_path)
-    pprint("Dumped %d shards of %s at %s", num_shards, dataset_name, output_dir)
+    pprint(f"Dumped {num_shards} shards of {dataset_name} at {output_dir}")
 
 def main(args: FlatArguments, tc: TokenizerConfig):
     # ------------------------------------------------------------
@@ -533,7 +534,16 @@ def main(args: FlatArguments, tc: TokenizerConfig):
 
     if accelerator.is_main_process:
         pprint("[DB Debug] Dumping the processed train dataset")
-        save_dataset_shards(train_dataset, args.output_dir + "/dumped_dataset")
+        pprint(f"[DB Debug] length of train_dataset is {len(train_dataset)}")
+
+        def decode(example, tokenizer):
+            return {
+                "decoded_text": tokenizer.decode(example["input_ids"]),
+                "decoded_labels": tokenizer.decode(example["labels"])
+            }
+        
+        decoded = train_dataset.map(decode, fn_kwargs={"tokenizer": tokenizer})
+        save_dataset_shards(decoded, args.output_dir + "/text_dataset")
 
     if args.cache_dataset_only:
         return
@@ -746,6 +756,25 @@ def main(args: FlatArguments, tc: TokenizerConfig):
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
     starting_epoch = 0
+
+    model_dtypes = {}
+    for module in model.modules():
+        name = (module.__class__.__name__)
+        d = get_parameter_dtype(module)
+        model_dtypes[name] = d
+
+    optim_dtypes = []
+    try:
+        
+        for module in self.optimizer.modules:
+            d = get_parameter_dtype(module)
+            optim_dtypes.append(d)
+    except Exception as e:
+        logger.info(f"Exception while getting optimize dtype {e}")
+    
+    logger.info(f"Model dtypes are {str(model_dtypes)}")
+    if len(optim_dtypes) > 0:
+        logger.info(f"Optimizer dtypes are {optim_dtypes}")
 
     # Potentially load in the weights and states from a previous save
     last_checkpoint_path = get_last_checkpoint_path(args)
