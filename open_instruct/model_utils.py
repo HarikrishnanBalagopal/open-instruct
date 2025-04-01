@@ -443,6 +443,7 @@ def push_folder_to_hub(
     hf_repo_revision: Optional[str] = None,
     private: bool = True,
 ):
+    return
     if accelerator.is_main_process:
         hf_repo_url = f"https://huggingface.co/{hf_repo_id}/tree/{hf_repo_revision}"
         api = HfApi()

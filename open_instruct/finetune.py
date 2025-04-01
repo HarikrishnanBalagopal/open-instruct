@@ -326,7 +326,7 @@ class FlatArguments:
     """The wandb's project name"""
     wandb_entity: Optional[str] = None
     """The entity (team) of wandb's project"""
-    push_to_hub: bool = True
+    push_to_hub: bool = False
     """Whether to upload the saved model to huggingface"""
     hf_entity: Optional[str] = None
     """The user or org name of the model repository from the Hugging Face Hub"""
@@ -527,23 +527,17 @@ def main(args: FlatArguments, tc: TokenizerConfig):
             dataset_local_cache_dir=args.dataset_local_cache_dir,
             dataset_skip_cache=args.dataset_skip_cache,
         )
+
+        if accelerator.is_main_process:
+            pprint("[DB Debug] Dumping the processed train dataset")
+            pprint(f"[DB Debug] length of train_dataset is {len(train_dataset)}. Sample looks like -")
+            visualize_token(train_dataset[0][INPUT_IDS_KEY], tokenizer)
+            save_dataset_shards(train_dataset, args.output_dir + "/text_dataset")
+            pprint(f"[DB Debug] dumped the processed train dataset to {args.output_dir + "/text_dataset"}")
         train_dataset = train_dataset.shuffle(seed=args.seed)
         train_dataset.set_format(type="pt")
     if accelerator.is_main_process:
         visualize_token(train_dataset[0][INPUT_IDS_KEY], tokenizer)
-
-    if accelerator.is_main_process:
-        pprint("[DB Debug] Dumping the processed train dataset")
-        pprint(f"[DB Debug] length of train_dataset is {len(train_dataset)}")
-
-        def decode(example, tokenizer):
-            return {
-                "decoded_text": tokenizer.decode(example["input_ids"]),
-                "decoded_labels": tokenizer.decode(example["labels"])
-            }
-        
-        decoded = train_dataset.map(decode, fn_kwargs={"tokenizer": tokenizer})
-        save_dataset_shards(decoded, args.output_dir + "/text_dataset")
 
     if args.cache_dataset_only:
         return
@@ -765,8 +759,7 @@ def main(args: FlatArguments, tc: TokenizerConfig):
 
     optim_dtypes = []
     try:
-        
-        for module in self.optimizer.modules:
+        for module in optimizer.modules:
             d = get_parameter_dtype(module)
             optim_dtypes.append(d)
     except Exception as e:

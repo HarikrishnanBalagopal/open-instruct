@@ -859,6 +859,22 @@ class SimplePreferenceCollator:
             REJECTED_INPUT_IDS_KEY: padded_sequences_rejected,
         }
 
+def get_extension(file_path: str) -> str:
+    _, ext = os.path.splitext(file_path)
+    return ext.lower()
+
+
+def get_loader_for_filepath(file_path: str) -> str:
+    ext = get_extension(file_path)
+    if ext in (".txt", ".md"):
+        return "text"
+    if ext in (".json", ".jsonl"):
+        return "json"
+    if ext in (".arrow",):
+        return "arrow"
+    if ext in (".parquet",):
+        return "parquet"
+    return ext
 
 # ----------------------------------------------------------------------------
 # Dataset Configuration and Caching
@@ -877,10 +893,11 @@ class DatasetConfig:
 
     def __post_init__(self):
         # if the file exists locally, use the local file
-        if os.path.exists(self.dataset_name) and self.dataset_name.endswith(".jsonl"):
-            assert self.dataset_split == "train", "Only train split is supported for local jsonl files."
+        if os.path.exists(self.dataset_name):
+            assert self.dataset_split == "train", "Only train split is supported for local files."
+            loader = get_loader_for_filepath(self.dataset_name)
             self.dataset = load_dataset(
-                "json",
+                loader,
                 data_files=self.dataset_name,
                 split=self.dataset_split,
             )
