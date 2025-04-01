@@ -432,10 +432,14 @@ def get_tokenizer_tulu_v2_2(tc: "TokenizerConfig"):
     if tc.chat_template_name in CHAT_TEMPLATES:
         tokenizer.chat_template = CHAT_TEMPLATES[tc.chat_template_name]
     else:
-        try:
-            tokenizer.chat_template = AutoTokenizer.from_pretrained(tc.tokenizer_name_or_path).chat_template
-        except Exception:
-            raise ValueError(f"Could not find chat template for {tc.tokenizer_name_or_path}.")
+        if tc.chat_template is not None:
+            tokenizer.chat_template = tc.chat_template
+            print(f"✅ Picked tokenizer chat template from command line to - {tc.chat_template}")
+        else:
+            try:
+                tokenizer.chat_template = AutoTokenizer.from_pretrained(tc.tokenizer_name_or_path).chat_template
+            except Exception:
+                raise ValueError(f"Could not find chat template for {tc.tokenizer_name_or_path}.")
 
     if tc.add_bos:
         if tokenizer.chat_template.startswith("{{ bos_token }}") or (
@@ -471,6 +475,7 @@ class TokenizerConfig:
     chat_template_name: str = "tulu"  # TODO: should I give an option to force override?
     add_bos: bool = False
     get_tokenizer_fn: str = "get_tokenizer_tulu_v2_2"
+    chat_template: str = None
 
     # for tracking purposes
     tokenizer_files_hash: Optional[List[str]] = None
@@ -498,6 +503,15 @@ class TokenizerConfig:
                     " you should use only `--tokenizer_name_or_path` in the future as `tokenizer_name` is deprecated."
                 )
             self.tokenizer_name_or_path = self.tokenizer_name
+
+        if self.chat_template is not None:
+            def unescape(s):
+             if s is None:
+                 return None
+             return s.encode("utf-8").decode("unicode_escape")
+         
+            self.chat_template = unescape(self.chat_template)
+
         return GET_TOKENIZER_FN[self.get_tokenizer_fn](self)
 
 
