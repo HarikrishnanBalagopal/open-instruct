@@ -429,17 +429,16 @@ def get_tokenizer_tulu_v2_2(tc: "TokenizerConfig"):
     # set the tokenizer chat template to the training format
     # this will be used for encoding the training examples
     # and saved together with the tokenizer to be used later.
-    if tc.chat_template_name in CHAT_TEMPLATES:
+    if tc.chat_template is not None:
+        tokenizer.chat_template = tc.chat_template
+        print(f"✅ Picked tokenizer chat template from command line to - {tc.chat_template}")
+    elif tc.chat_template_name in CHAT_TEMPLATES:
         tokenizer.chat_template = CHAT_TEMPLATES[tc.chat_template_name]
     else:
-        if tc.chat_template is not None:
-            tokenizer.chat_template = tc.chat_template
-            print(f"✅ Picked tokenizer chat template from command line to - {tc.chat_template}")
-        else:
-            try:
-                tokenizer.chat_template = AutoTokenizer.from_pretrained(tc.tokenizer_name_or_path).chat_template
-            except Exception:
-                raise ValueError(f"Could not find chat template for {tc.tokenizer_name_or_path}.")
+        try:
+            tokenizer.chat_template = AutoTokenizer.from_pretrained(tc.tokenizer_name_or_path).chat_template
+        except Exception:
+            raise ValueError(f"Could not find chat template for {tc.tokenizer_name_or_path}.")
 
     if tc.add_bos:
         if tokenizer.chat_template.startswith("{{ bos_token }}") or (
