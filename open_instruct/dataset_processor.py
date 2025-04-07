@@ -87,6 +87,7 @@ BINARY_DATASET_KEYS = [
 # flake8: noqa
 # note we added `{% if loop.last and not add_generation_prompt %}{{ eos_token }}{% endif %}`
 # because we want the template to not output eos_token if `add_generation_prompt=True`
+
 CHAT_TEMPLATES = {
     "simple_concat_with_space": (
         "{% for message in messages %}"

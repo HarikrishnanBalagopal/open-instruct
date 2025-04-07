@@ -168,6 +168,51 @@ CHAT_TEMPLATES = {
         "{% endif %}"
         "{% endfor %}"
     ),
+    # #== granite3dot1original: copied from GraniteInstruct's tokenizer_config.json and Not tested yet
+    "granite3dot1original":(
+        "{%- if messages[0]['role'] == 'system' %}\n    {%- set system_message = messages[0]['content'] %}\n    {%- set loop_messages = messages[1:] %}\n{%- else %}\n    {%- set system_message = \"Knowledge Cutoff Date: April 2024.\nToday's Date: \" + strftime_now('%B %d, %Y') + \".\nYou are Granite, developed by IBM.\" %}\n    {%- if tools and documents %}\n        {%- set system_message = system_message + \" You are a helpful AI assistant with access to the following tools. When a tool is required to answer the user's query, respond with <|tool_call|> followed by a JSON list of tools used. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.\n\nWrite the response to the user's input by strictly aligning with the facts in the provided documents. If the information needed to answer the question is not available in the documents, inform the user that the question cannot be answered based on the available data.\" %}\n    {%- elif tools %}\n        {%- set system_message = system_message + \" You are a helpful AI assistant with access to the following tools. When a tool is required to answer the user's query, respond with <|tool_call|> followed by a JSON list of tools used. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.\" %}\n    {%- elif documents %}\n        {%- set system_message = system_message + \" Write the response to the user's input by strictly aligning with the facts in the provided documents. If the information needed to answer the question is not available in the documents, inform the user that the question cannot be answered based on the available data.\" %}\n    {%- else %}\n        {%- set system_message = system_message + \" You are a helpful AI assistant.\" %}    \n    {%- endif %}\n    {%- if 'citations' in controls and documents %}\n        {%- set system_message = system_message + '\n\nIn your response, use the symbols <co> and </co> to indicate when a fact comes from a document in the search result, e.g <co>0</co> for a fact from document 0. Afterwards, list all the citations with their corresponding documents in an ordered list.' %}\n    {%- endif %}\n    {%- if 'hallucinations' in controls and documents %}\n        {%- set system_message = system_message + '\n\nFinally, after the response is written, include a numbered list of sentences from the response that are potentially hallucinated and not based in the documents.' %}\n    {%- endif %}\n    {%- set loop_messages = messages %}\n{%- endif %}\n{{- '<|start_of_role|>system<|end_of_role|>' + system_message + '<|endoftext|>\n' }}\n{%- if tools %}\n    {{- '<|start_of_role|>tools<|end_of_role|>' }}\n    {{- tools | tojson(indent=4) }}\n    {{- '<|endoftext|>\n' }}\n{%- endif %}\n{%- if documents %}\n    {{- '<|start_of_role|>documents<|end_of_role|>' }}\n    {%- for document in documents %}\n        {{- 'Document ' + loop.index0 | string + '\n' }}\n        {{- document['text'] }}\n        {%- if not loop.last %}\n            {{- '\n\n'}}\n        {%- endif%}\n    {%- endfor %}\n    {{- '<|endoftext|>\n' }}\n{%- endif %}\n{%- for message in loop_messages %}\n    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|endoftext|>\n' }}\n    {%- if loop.last and add_generation_prompt %}\n        {{- '<|start_of_role|>assistant' }}\n            {%- if controls %}\n                {{- ' ' + controls | tojson()}}\n            {%- endif %}\n        {{- '<|end_of_role|>' }}\n    {%- endif %}\n{%- endfor %}"
+    ),
+    "granite3dot1wotimestamp":(
+        "{%- if messages[0]['role'] == 'system' %}\n    {%- set system_message = messages[0]['content'] %}\n    {%- set loop_messages = messages[1:] %}\n{%- else %}\n    {%- set system_message = \"Knowledge Cutoff Date: April 2024.\nYou are Granite, developed by IBM.\" %}\n    {%- if tools and documents %}\n        {%- set system_message = system_message + \" You are a helpful AI assistant with access to the following tools. When a tool is required to answer the user's query, respond with <|tool_call|> followed by a JSON list of tools used. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.\n\nWrite the response to the user's input by strictly aligning with the facts in the provided documents. If the information needed to answer the question is not available in the documents, inform the user that the question cannot be answered based on the available data.\" %}\n    {%- elif tools %}\n        {%- set system_message = system_message + \" You are a helpful AI assistant with access to the following tools. When a tool is required to answer the user's query, respond with <|tool_call|> followed by a JSON list of tools used. If a tool does not exist in the provided list of tools, notify the user that you do not have the ability to fulfill the request.\" %}\n    {%- elif documents %}\n        {%- set system_message = system_message + \" Write the response to the user's input by strictly aligning with the facts in the provided documents. If the information needed to answer the question is not available in the documents, inform the user that the question cannot be answered based on the available data.\" %}\n    {%- else %}\n        {%- set system_message = system_message + \" You are a helpful AI assistant.\" %}    \n    {%- endif %}\n    {%- if 'citations' in controls and documents %}\n        {%- set system_message = system_message + '\n\nIn your response, use the symbols <co> and </co> to indicate when a fact comes from a document in the search result, e.g <co>0</co> for a fact from document 0. Afterwards, list all the citations with their corresponding documents in an ordered list.' %}\n    {%- endif %}\n    {%- if 'hallucinations' in controls and documents %}\n        {%- set system_message = system_message + '\n\nFinally, after the response is written, include a numbered list of sentences from the response that are potentially hallucinated and not based in the documents.' %}\n    {%- endif %}\n    {%- set loop_messages = messages %}\n{%- endif %}\n{{- '<|start_of_role|>system<|end_of_role|>' + system_message + '<|endoftext|>\n' }}\n{%- if tools %}\n    {{- '<|start_of_role|>tools<|end_of_role|>' }}\n    {{- tools | tojson(indent=4) }}\n    {{- '<|endoftext|>\n' }}\n{%- endif %}\n{%- if documents %}\n    {{- '<|start_of_role|>documents<|end_of_role|>' }}\n    {%- for document in documents %}\n        {{- 'Document ' + loop.index0 | string + '\n' }}\n        {{- document['text'] }}\n        {%- if not loop.last %}\n            {{- '\n\n'}}\n        {%- endif%}\n    {%- endfor %}\n    {{- '<|endoftext|>\n' }}\n{%- endif %}\n{%- for message in loop_messages %}\n    {{- '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|endoftext|>\n' }}\n    {%- if loop.last and add_generation_prompt %}\n        {{- '<|start_of_role|>assistant' }}\n            {%- if controls %}\n                {{- ' ' + controls | tojson()}}\n            {%- endif %}\n        {{- '<|end_of_role|>' }}\n    {%- endif %}\n{%- endfor %}"
+    ),
+    "granite3dot1wodefaultsysmsg": (
+        "{%- if messages[0]['role'] == 'system' %}"
+            "{%- set system_message = messages[0]['content'] %}"
+            "{%- set loop_messages = messages[1:] %}"
+        "{%- else %}"
+            "{%- set system_message = '' %}"
+            "{%- set loop_messages = messages %}"
+        "{%- endif %}"
+        "{%- if system_message|length > 0 %}"
+            "{{ '<|start_of_role|>system<|end_of_role|>' + system_message + '<|endoftext|>\n' }}"
+        "{%- endif %}"
+        "{%- if tools %}"
+            "{{ '<|start_of_role|>tools<|end_of_role|>' }}"
+            "{{ tools | tojson(indent=4) }}"
+            "{{ '<|endoftext|>\n' }}"
+        "{%- endif %}"
+        "{%- if documents %}"
+            "{{ '<|start_of_role|>documents<|end_of_role|>' }}"
+            "{%- for document in documents %}"
+                "{{ 'Document ' + loop.index0|string + '\n' }}"
+                "{{ document['text'] }}"
+                "{%- if not loop.last %}"
+                    "{{ '\n\n' }}"
+                "{%- endif %}"
+            "{%- endfor %}"
+            "{{ '<|endoftext|>\n' }}"
+        "{%- endif %}"
+        "{%- for message in loop_messages %}"
+            "{{ '<|start_of_role|>' + message['role'] + '<|end_of_role|>' + message['content'] + '<|endoftext|>\n' }}"
+            "{%- if loop.last and add_generation_prompt %}"
+                "{{ '<|start_of_role|>assistant' }}"
+                "{%- if controls %}"
+                    "{{ ' ' + controls|tojson() }}"
+                "{%- endif %}"
+                "{{ '<|end_of_role|>' }}"
+            "{%- endif %}"
+        "{%- endfor %}"
+    ),
     "tulu": (
         "{% for message in messages %}"
         "{% if message['role'] == 'system' %}"
@@ -429,10 +474,8 @@ def get_tokenizer_tulu_v2_2(tc: "TokenizerConfig"):
     # set the tokenizer chat template to the training format
     # this will be used for encoding the training examples
     # and saved together with the tokenizer to be used later.
-    if tc.chat_template is not None:
-        tokenizer.chat_template = tc.chat_template
-        print(f"✅ Picked tokenizer chat template from command line to - {tc.chat_template}")
-    elif tc.chat_template_name in CHAT_TEMPLATES:
+    #== DQA: use tc.chat_template_name to define ct in CHAT_TEMPLATES
+    if tc.chat_template_name in CHAT_TEMPLATES:
         tokenizer.chat_template = CHAT_TEMPLATES[tc.chat_template_name]
     else:
         try:
@@ -457,7 +500,7 @@ GET_TOKENIZER_FN = {
     "get_tokenizer_simple_v1": get_tokenizer_simple_v1,
     "get_tokenizer_tulu_v1": get_tokenizer_tulu_v1,  # old version, see https://github.com/allenai/open-instruct/pull/570
     "get_tokenizer_tulu_v2_1": get_tokenizer_tulu_v2_1,
-    "get_tokenizer_tulu_v2_2": get_tokenizer_tulu_v2_2,
+    "get_tokenizer_tulu_v2_2": get_tokenizer_tulu_v2_2, #== DQA: Latest used version (do not change but tc.chat_template_name)
 }
 
 DEFAULT_SFT_MESSAGES_KEY = "messages"
@@ -616,7 +659,7 @@ def sft_filter_v1(
     contain_some_labels = any(x != -100 for x in row[LABELS_KEY])
     return max_prompt_token_length_ok and max_token_length_ok and (contain_some_labels or not need_contain_labels)
 
-
+#== DQA: APPLY CHAT TEMPLATE:
 def sft_tulu_tokenize_and_truncate_v1(row: Dict[str, Any], tokenizer: PreTrainedTokenizer, max_seq_length: int):
     """taken directly from https://github.com/allenai/open-instruct/blob/ba11286e5b9eb00d4ce5b40ef4cac1389888416a/open_instruct/finetune.py#L385"""
     messages = row["messages"]
@@ -814,7 +857,7 @@ def rlvr_filter_v1(
     contain_some_labels = any(x != -100 for x in row[LABELS_KEY])
     return max_prompt_token_length_ok and max_token_length_ok and (contain_some_labels or not need_contain_labels)
 
-
+#== DQA: NEED TO KNOW WHAT FUNC TO CALL:
 TRANSFORM_FNS = {
     "sft_tokenize_v1": (sft_tokenize_v1, "map"),
     "sft_tokenize_mask_out_prompt_v1": (sft_tokenize_mask_out_prompt_v1, "map"),
@@ -936,6 +979,7 @@ class DatasetConfig:
 
 
 def get_dataset_v1(dc: DatasetConfig, tc: TokenizerConfig):
+    #== DQA: DATA PREPARATION
     assert len(dc.transform_fn) == len(
         dc.transform_fn_args
     ), f"transform_fn and transform_fn_args must have the same length: {dc.transform_fn=} != {dc.transform_fn_args=}"
@@ -1092,7 +1136,7 @@ class LocalDatasetTransformationCache:
 
         # Check if the cache exists
         if os.path.exists(cache_path) and not dataset_skip_cache:
-            print(f"✅ Found cached dataset at {cache_path}")
+            print(f"✅ Found cached dataset at LOCAL: {cache_path}")
             return Dataset.load_from_disk(cache_path)
 
         print(f"Cache not found or invalid, transforming datasets...")
@@ -1183,6 +1227,7 @@ def get_cached_dataset_tulu(
         )
     elif dataset_cache_mode == "hf":
         cache = DatasetTransformationCache(config_hash=dataset_config_hash, hf_entity=hf_entity)
+    #== DQA: DATA PREPARATION
     return cache.load_or_transform_dataset(dcs, tc, dataset_skip_cache=dataset_skip_cache)
 
 

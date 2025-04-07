@@ -695,8 +695,9 @@ def clean_last_n_checkpoints(output_dir: str, keep_last_n_checkpoints: int) -> N
     checkpoints = sorted(folders, key=lambda x: int(x.split("_")[-1]))
     if keep_last_n_checkpoints >= 0 and len(checkpoints) > keep_last_n_checkpoints:
         for checkpoint in checkpoints[: len(checkpoints) - keep_last_n_checkpoints]:
-            logger.info(f"Removing checkpoint {checkpoint}")
-            shutil.rmtree(os.path.join(output_dir, checkpoint))
+            logger.info(f"== NOT Removing checkpoint {checkpoint}")
+            # logger.info(f"Removing checkpoint {checkpoint}")
+            # shutil.rmtree(os.path.join(output_dir, checkpoint))
     logger.info("Remaining files:" + str(os.listdir(output_dir)))
 
 

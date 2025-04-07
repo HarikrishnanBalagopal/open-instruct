@@ -22,6 +22,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import List, Literal, Optional, Union
+import sys
 
 import datasets
 import deepspeed
@@ -63,6 +64,12 @@ from open_instruct.utils import (
     maybe_use_ai2_hf_entity,
     maybe_use_ai2_wandb_entity,
 )
+
+from typing import List, Dict, Optional
+from transformers import PreTrainedTokenizer
+
+from dataclasses import asdict
+import sys
 
 logger = get_logger(__name__)
 
@@ -115,24 +122,34 @@ class FlatArguments:
         default=None,
         metadata={"help": "A dictionary of datasets (local or HF) to sample from."},
     )
+    
     dataset_mixer_list: List[str] = field(default_factory=lambda: ["allenai/tulu-3-sft-personas-algebra", "1.0"])
     """A list of datasets (local or HF) to sample from."""
+    
     dataset_mixer_list_splits: List[str] = field(default_factory=lambda: ["train"])
     """The dataset splits to use for training"""
+    
+    #== DQA: FUNCTIONS USED TO TRANSFORM TRAINING DATASET (USED IN dataset_transformation.py)
     dataset_transform_fn: list[str] = field(
         default_factory=lambda: ["sft_tulu_tokenize_and_truncate_v1", "sft_tulu_filter_v1"]
     )
     """The list of transform functions to apply to the dataset."""
+    
     dataset_target_columns: List[str] = field(default_factory=lambda: TOKENIZED_SFT_DATASET_KEYS)
     """The columns to use for the dataset."""
+    
     dataset_cache_mode: Literal["hf", "local"] = "local"
     """The mode to use for caching the dataset."""
+    
     dataset_local_cache_dir: str = "local_dataset_cache"
     """The directory to save the local dataset cache to."""
+    
     dataset_config_hash: Optional[str] = None
     """The hash of the dataset configuration."""
-    dataset_skip_cache: bool = False
+    
+    dataset_skip_cache: bool = False #== DQA: NOT to read data from cache?!
     """Whether to skip the cache."""
+    
     dataset_mix_dir: Optional[str] = field(
         default=None,
         metadata={"help": "The directory to save the mixed dataset to disk."},
@@ -318,6 +335,12 @@ class FlatArguments:
         default=0.5,
         metadata={"help": "Weight for load balancing loss if applicable."},
     )
+    
+    #== DQA: Add new special tokens:
+    add_special_tokens: Optional[List[str]] = field(
+        default=None,
+        metadata={"help": "List of additional special tokens to add to the tokenizer"},
+    )
 
     # Experiment tracking
     with_tracking: bool = False
@@ -326,7 +349,7 @@ class FlatArguments:
     """The wandb's project name"""
     wandb_entity: Optional[str] = None
     """The entity (team) of wandb's project"""
-    push_to_hub: bool = False
+    push_to_hub: bool = False # DQA: from True
     """Whether to upload the saved model to huggingface"""
     hf_entity: Optional[str] = None
     """The user or org name of the model repository from the Hugging Face Hub"""
@@ -337,8 +360,9 @@ class FlatArguments:
     hf_repo_url: Optional[str] = None
     """The url of the saved model in the Hugging Face Hub (will be autoset)"""
     try_launch_beaker_eval_jobs: bool = False
+    try_launch_beaker_eval_jobs: bool = False # DQA: from True
     """Whether to launch beaker evaluation jobs after training"""
-    hf_metadata_dataset: Optional[str] = "allenai/tulu-3-evals"
+    hf_metadata_dataset: Optional[str] = "" # from "allenai/tulu-3-evals"
     """What dataset to upload the metadata to. If unset, don't upload metadata"""
     cache_dataset_only: bool = False
     """Immediately exit after caching the dataset"""
@@ -398,11 +422,58 @@ def save_dataset_shards(
         shard.to_parquet(shard_path)
     pprint(f"Dumped {num_shards} shards of {dataset_name} at {output_dir}")
 
+def debug_apply_chat_template_and_tokenize(
+    tokenizer: PreTrainedTokenizer,
+    messages: Optional[List[Dict[str, str]]] = None
+) -> None:
+    """
+    Applies the chat template to messages and tokenizes the resulting text.
+    
+    Args:
+        tokenizer (PreTrainedTokenizer): The tokenizer instance.
+        messages (Optional[List[Dict[str, str]]]): List of message dictionaries with "role" and "content".
+    """
+    print(
+        f"\n== Vocab: ({len(tokenizer):,} - {tokenizer.vocab_size:,}) "
+        f"tokenizer.special_tokens_map (len={len(tokenizer.special_tokens_map)}): {tokenizer.special_tokens_map}"
+    )
+
+    if messages is None:
+        messages = [
+            {"role": "user", "content": "Who?"},
+            {"role": "assistant", "content": "LLM"},
+        ]
+
+    text = tokenizer.apply_chat_template(messages, tokenize=False)
+    print(f"\n== messages:\n{messages}")
+    print(f"\n== apply_chat_template(messages):\n{text}")
+    
+    tokens = tokenizer.encode(text, add_special_tokens=False)
+    decoded_tokens = [tokenizer.decode([t]) for t in tokens]
+    zipped = [f"({token_id}, `{token_str}`)" for token_id, token_str in zip(tokens, decoded_tokens)]
+    print(f"{repr(text)} \n-> (len:{len(tokens)}) {tokens} \n-> {zipped}")
+        
+
+def debug_STOP(accelerator: Accelerator) -> None:
+    """
+    Stops debugging and cleans up distributed resources.
+    
+    Args:
+        accelerator (Accelerator): The accelerator instance managing distributed training.
+    """
+    print("== STOP DEBUGGING AND CLEANING UP RESOURCES ==")
+    accelerator.wait_for_everyone()
+    # Attempt to clean up distributed resources
+    accelerator.end_training()
+    accelerator.free_memory()
+    sys.exit(0)
+
 def main(args: FlatArguments, tc: TokenizerConfig):
     # ------------------------------------------------------------
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
+    #TODO: chk args (goal: tc.chat_template_name)
     accelerator_log_kwargs = {}
     if args.with_tracking:
         accelerator_log_kwargs["log_with"] = args.report_to
@@ -416,7 +487,7 @@ def main(args: FlatArguments, tc: TokenizerConfig):
         **accelerator_log_kwargs,
         kwargs_handlers=[timeout_kwargs],
     )
-
+    
     # ------------------------------------------------------------
     # Setup tokenizer
     tc.tokenizer_revision = args.model_revision if tc.tokenizer_revision is None else tc.tokenizer_revision
@@ -430,11 +501,29 @@ def main(args: FlatArguments, tc: TokenizerConfig):
                    from the model revision `{args.model_revision=}` or the tokenizer name `{tc.tokenizer_name_or_path=}`
                    is different from the model name `{args.model_name_or_path=}`."""
         logger.warning(warning)
+    
+    #== DQA: add special chat tokens:
+    if args.add_special_tokens is not None:
+        existing_special_tokens = tc.tokenizer.special_tokens_map.get("additional_special_tokens", [])
+        new_special_tokens = [t for t in args.add_special_tokens if t not in existing_special_tokens]
+        if new_special_tokens:  
+            all_special_tokens = existing_special_tokens + new_special_tokens
+            tc.tokenizer.add_special_tokens({"additional_special_tokens": all_special_tokens})
+            if accelerator.is_main_process:
+                print(f"\n== Updated special tokens ({len(existing_special_tokens)} -> {len(all_special_tokens)}): {all_special_tokens}")
+        
+
     tokenizer = tc.tokenizer
 
+    if accelerator.is_main_process:
+        #== DQA: quick test on applying chat template + tokenizer on a simple example:
+        debug_apply_chat_template_and_tokenize(tokenizer)
+        
     # ------------------------------------------------------------
     # Set up runtime variables
+    #== DQA DEFINE CHECKPOINT FOLDER:
     args.run_name = f"{args.exp_name}__{args.seed}__{int(time.time())}"
+    # args.run_name = f"checkpoint" #== DQA: for a fixed folder
     args.output_dir = os.path.join(args.output_dir, args.run_name)
     args.dataset_local_cache_dir = os.path.abspath(args.dataset_local_cache_dir)
     if is_beaker_job():
@@ -480,8 +569,19 @@ def main(args: FlatArguments, tc: TokenizerConfig):
         )
         wandb_tracker = accelerator.get_tracker("wandb")
 
+        
     if accelerator.is_main_process:
-        pprint([args, tc])
+        #== DQA: PRINT OUT FINAL PARAMS
+        # pprint([args, tc])        
+        print("\n============================= FlatArguments (args) =============================")
+        for key, value in asdict(args).items():
+            print(f"{key:30s}: {value}")
+        
+        print("\n============================= TokenizerConfig (tc) =============================")
+        for key, value in asdict(tc).items():
+            print(f"{key:30s}: {value}")
+        print("\n================================================================================")
+        
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -508,12 +608,37 @@ def main(args: FlatArguments, tc: TokenizerConfig):
     accelerator.wait_for_everyone()
 
     if args.dataset_mixer is not None:
+        #== 00-DQA: Show how to define data mixture (ds: pct)
         args.dataset_mixer_list = [item for pair in args.dataset_mixer.items() for item in pair]
     with accelerator.main_process_first():
         transform_fn_args = [
             {"max_seq_length": args.max_seq_length},
             {},
         ]
+        
+        if accelerator.is_main_process:
+            def tokenize_and_print(text, tokenizer):
+                print(f"\n== len(tokenizer): {len(tokenizer):,}\n== tokenizer.vocab_size: {tokenizer.vocab_size:,}\n== tokenizer.special_tokens_map: {tokenizer.special_tokens_map}")
+                tokens = tokenizer.encode(text, add_special_tokens=False)
+                decoded_tokens = [tokenizer.decode([t]) for t in tokens]
+                zipped = [f"({token_id}, `{token_str}`)" for token_id, token_str in zip(tokens, decoded_tokens)]
+                formatted_text = repr(text)  # Compute repr() first
+                print(f"{formatted_text} \n-> (len:{len(tokens)}) {tokens} \n-> {zipped}")
+            
+            messages = [
+                { "role": "user", "content": "Who?" },
+                { "role": "assistant", "content": "an AI" },
+            ]
+            applied_ct_smp = tokenizer.apply_chat_template(messages, tokenize=False)
+            print(f"\n== applied_ct_smp:\n{applied_ct_smp}")
+            tokenize_and_print(applied_ct_smp, tokenizer)
+            
+            # applied_ct_smp = tc.tokenizer.apply_chat_template(messages, tokenize=False)
+            # print(f"\n== B2. applied_ct_smp:\n{applied_ct_smp}")
+            # tokenize_and_print(applied_ct_smp, tc.tokenizer)
+
+
+        #== 00-DQA: DATA PREPARATION:
         train_dataset = get_cached_dataset_tulu(
             dataset_mixer_list=args.dataset_mixer_list,
             dataset_mixer_list_splits=args.dataset_mixer_list_splits,
@@ -534,6 +659,31 @@ def main(args: FlatArguments, tc: TokenizerConfig):
             visualize_token(train_dataset[0][INPUT_IDS_KEY], tokenizer)
             save_dataset_shards(train_dataset, args.output_dir + "/text_dataset")
             pprint(f"[DB Debug] dumped the processed train dataset to {args.output_dir + "/text_dataset"}")
+
+        #== 00-DQA: PRINT A FEW SAMPLES (only on main process) FOR TESTING:
+            print(f"\n========== DEBUGGING: PRINT FIRST 3 SAMPLES AFTER get_cached_dataset_tulu(): ==========\n")
+            num_samples = min(3, len(train_dataset)) 
+            for i in range(num_samples):
+                sample = train_dataset[i]
+                print(f"***  Sample {i + 1} ***")
+                # Decode tokens to text if INPUT_IDS_KEY exists, otherwise print raw sample
+                if INPUT_IDS_KEY in sample:
+                    # NOTE: skip_special_tokens=True to NOT display eos_token but THIS TOKEN is INSIDE the seq of tokenIDs used to train the model
+                    decoded_text = tokenizer.decode(sample[INPUT_IDS_KEY], skip_special_tokens=False) 
+                    # print(f"== sample: {sample}")
+                    print(f"== DECODED TEXT({len(decoded_text)}):\n{decoded_text}")
+                    print(f"== input_ids: ({len(sample[INPUT_IDS_KEY])}):\n{sample[INPUT_IDS_KEY]}")
+                    print(f"== attention_mask: ({len(sample['attention_mask'])}):\n{sample['attention_mask']}")
+                    print(f"== labels: ({len(sample['labels'])}):\n{sample['labels']}")
+                else:
+                    print(f"== RAW SAMPLE: {sample}")
+                print("-" * 50)
+            
+            print(f"========== END DEBUGGING: PRINT FIRST 3 SAMPLES get_cached_dataset_tulu() ==========\n")
+        
+        # debug_STOP()
+
+        #== 00-DQA: DATA SAMPLE SHUFFLING:
         train_dataset = train_dataset.shuffle(seed=args.seed)
         train_dataset.set_format(type="pt")
     if accelerator.is_main_process:
@@ -654,7 +804,7 @@ def main(args: FlatArguments, tc: TokenizerConfig):
         model.print_trainable_parameters()
     elif args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
-
+    
     # DataLoaders creation:
     train_dataloader = DataLoader(
         train_dataset,
@@ -662,7 +812,19 @@ def main(args: FlatArguments, tc: TokenizerConfig):
         collate_fn=DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding="longest"),
         batch_size=args.per_device_train_batch_size,
     )
-
+    #== DQA: DATA FORMAT PRIOR TO TRAINING HERE
+    if accelerator.is_main_process:
+        print(f"\n========== DEBUGGING: PRINT SAMPLES AFTER DataCollatorForSeq2Seq: ==========\n")
+        for i, sample in enumerate(train_dataloader):
+            print(f"***  Sample {i + 1} ***")
+            print(f"== input_ids: ({len(sample['input_ids'][0])}):\n{sample['input_ids'][0]}")
+            print(f"== attention_mask: ({len(sample['attention_mask'][0])}):\n{sample['attention_mask'][0]}")
+            print(f"== labels: ({len(sample['labels'][0])}):\n{sample['labels'][0]}")
+            if i == 2: break
+        print(f"========== END DEBUGGING: PRINT SAMPLES AFTER DataCollatorForSeq2Seq ==========\n")
+    
+    # debug_STOP()
+    
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
     no_decay = ["bias", "layer_norm.weight"]
@@ -739,13 +901,19 @@ def main(args: FlatArguments, tc: TokenizerConfig):
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
-    logger.info("***** Running training *****")
+    
+    logger.info("\n =========================== RUNNING TRAINING ===========================")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
     logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
     logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
+    logger.info("\n ================================================================================")
+
+    
+    # #=== 00-DQA: DEBUG JUST BEFORE TRAINING:
+    # sys.exist(0)
     # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
@@ -772,7 +940,7 @@ def main(args: FlatArguments, tc: TokenizerConfig):
     # Potentially load in the weights and states from a previous save
     last_checkpoint_path = get_last_checkpoint_path(args)
     if last_checkpoint_path:
-        accelerator.print(f"Resumed from checkpoint: {last_checkpoint_path}")
+        accelerator.print(f"Found and Resumed from checkpoint: {last_checkpoint_path}")
         accelerator.load_state(last_checkpoint_path)
         # Extract `epoch_{i}` or `step_{i}`
         last_checkpoint_path = os.path.basename(last_checkpoint_path)
@@ -980,4 +1148,5 @@ def main(args: FlatArguments, tc: TokenizerConfig):
 if __name__ == "__main__":
     parser = ArgumentParserPlus((FlatArguments, TokenizerConfig))
     args, tc = parser.parse_args_into_dataclasses()
+    
     main(args, tc)
