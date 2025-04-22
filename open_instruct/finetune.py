@@ -661,8 +661,9 @@ def main(args: FlatArguments, tc: TokenizerConfig):
             pprint("[DB Debug] Dumping the processed train dataset")
             pprint(f"[DB Debug] length of train_dataset is {len(train_dataset)}. Sample looks like -")
             visualize_token(train_dataset[0][INPUT_IDS_KEY], tokenizer)
-            save_dataset_shards(train_dataset, args.output_dir + "/text_dataset")
-            pprint(f"[DB Debug] dumped the processed train dataset to {args.output_dir + "/text_dataset"}")
+            text_dataset_output_dir = args.output_dir + "/text_dataset"
+            save_dataset_shards(train_dataset, text_dataset_output_dir)
+            pprint(f"[DB Debug] dumped the processed train dataset to {text_dataset_output_dir}")
 
         #== 00-DQA: PRINT A FEW SAMPLES (only on main process) FOR TESTING:
             print(f"\n========== DEBUGGING: PRINT FIRST 3 SAMPLES AFTER get_cached_dataset_tulu(): ==========\n")
